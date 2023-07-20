@@ -24,8 +24,8 @@ contract Voting is Ownable{
     mapping(uint256=>VoteSession) private voteSessions;
     mapping(uint256=>uint256) private totalOptions;
 
-    event createVoteSession(uint256 options);
-    event endVOte(uint256 voteSessionId);
+    event createVote(uint256 options);
+    event endVote(uint256 voteSessionId);
 
     constructor(uint256 duration){
         votingDuration = duration;
@@ -44,7 +44,7 @@ contract Voting is Ownable{
         v.optionCounts = new uint256[](options);
         totalOptions[voteSessionCounter] = options;
 
-        emit createVoteSession(options);
+        emit createVote(options);
     }
 
     // Function to vote for a specific option in a voting session
@@ -53,18 +53,19 @@ contract Voting is Ownable{
         require(voteSessions[voteSessionId].isVoting, "Voting has ended");
         require(voteSessions[voteSessionId].endTime >= block.timestamp, "Voting has ended");
         require(msg.value == bet, "Insufficient tokens to vote");
-        require(options < totalOptions[voteSessionId], "Invaild voting option");
+        //require(option < VoteSessions[voteSessionId].optionCounts.length, "Invaild voting option");
+        require(option < totalOptions[voteSessionId],"Invaild voting option");
 
         voteSessions[voteSessionId].hasVoted[msg.sender] = true;
 
-        voteSessions[voteSessionId].voteCounts[option] += 1;
-        voteSessions[voteSessionId].voteForOption[option].push(msg.sender);
+        voteSessions[voteSessionId].optionCounts[option] += 1;
+        voteSessions[voteSessionId].voteForOptions[option].push(msg.sender);
 
         voteSessions[voteSessionId].totalToken += bet;
     }
 
     // Function to end a voting session and distribute rewards
-    function endVote (uint256 voteSessionId) external onlyOwner{
+    function endVoteSession(uint256 voteSessionId) external onlyOwner{
         voteSessions[voteSessionId].isVoting = false;
         distributeReward(voteSessionId);
 
@@ -74,14 +75,14 @@ contract Voting is Ownable{
     // Function to distribute rewards to the winning option voters
     function distributeReward(uint256 voteSessionId) internal{
         uint256 totalToken = voteSessions[voteSessionId].totalToken;
-        uint256[] memory voteCounts = voteSessions[voteSessionId].voteCounts;
+        uint256[] memory optionCounts = voteSessions[voteSessionId].optionCounts;
 
         // Find the option with the minimum votes
-        uint256 minVoteCount = voteCounts[0];
+        uint256 minVoteCount = optionCounts[0];
         uint256 winningOption = 0;
-        for(uint256 i = 1; i < totalOptions[voteSessionId]; i++) {
-            if(voteCounts[i] < minVoteCount) {
-                minVoteCount = voteCounts[i];
+        for(uint256 i = 1; i < optionCounts.length; i++) {
+            if(optionCounts[i] < minVoteCount) {
+                minVoteCount = optionCounts[i];
                 winningOption = i;
             }
         }
@@ -92,7 +93,7 @@ contract Voting is Ownable{
         }
 
         // Distribute the reward to the winning option voters
-        address[] memory winners = voteSessions[voteSessionId].voteForOption[winningOption];
+        address[] memory winners = voteSessions[voteSessionId].voteForOptions[winningOption];
         uint256 tokensPerWinner = totalToken / winners.length;
 
         for(uint256 i = 0; i < winners.length; i++) {
