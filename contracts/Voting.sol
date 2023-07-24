@@ -8,6 +8,7 @@ contract Voting is Ownable{
     using SafeMath for uint256;
 
     struct VoteSession {
+        string topic;
         bool isVoting;
         uint256 startTime;
         uint256 endTime;
@@ -32,11 +33,12 @@ contract Voting is Ownable{
     }
 
     // Function to create a new voting session with the given number of options
-    function createVoteSession(uint256 options) external onlyOwner{
+    function createVoteSession(string calldata topic, uint256 options) external onlyOwner{
         require(options > 1, "Invaild number of options");
         voteSessionCounter++;
 
         VoteSession storage v = voteSessions[voteSessionCounter];
+        v.topic = topic;
         v.isVoting = true;
         v.startTime = block.timestamp;
         v.endTime = block.timestamp + votingDuration;
@@ -53,7 +55,6 @@ contract Voting is Ownable{
         require(voteSessions[voteSessionId].isVoting, "Voting has ended");
         require(voteSessions[voteSessionId].endTime >= block.timestamp, "Voting has ended");
         require(msg.value == bet, "Insufficient tokens to vote");
-        //require(option < VoteSessions[voteSessionId].optionCounts.length, "Invaild voting option");
         require(option < totalOptions[voteSessionId],"Invaild voting option");
 
         voteSessions[voteSessionId].hasVoted[msg.sender] = true;
@@ -66,6 +67,8 @@ contract Voting is Ownable{
 
     // Function to end a voting session and distribute rewards
     function endVoteSession(uint256 voteSessionId) external onlyOwner{
+        require(voteSessions[voteSessionId].endTime < block.timestamp, "Voting not ended");
+
         voteSessions[voteSessionId].isVoting = false;
         distributeReward(voteSessionId);
 
@@ -112,14 +115,21 @@ contract Voting is Ownable{
         bet = _bet;
     }
 
+    function forceVotingEnd(uint256 voteSessionId) external onlyOwner {
+        voteSessions[voteSessionId].isVoting = false;
+        distributeReward(voteSessionId);
+
+        emit endVote(voteSessionId);
+    }
+
     // Function to get voting session information
-    function getVoteSession(uint256 voteSessionId) public view returns(uint256 startTime, uint256 endTime, uint256 totalToken){
+    function getVoteSession(uint256 voteSessionId) public view returns(string memory topic, uint256 startTime, uint256 endTime, uint256 totalToken){
         VoteSession storage session = voteSessions[voteSessionId];
         return(
+            session.topic,
             session.startTime,
             session.endTime,
             session.totalToken
         );
     }
-
 }
