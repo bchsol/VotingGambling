@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
-contract Voting is Ownable{
-    using SafeMath for uint256;
+contract UupsVoting is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     struct VoteSession {
         string topic;
@@ -13,27 +13,28 @@ contract Voting is Ownable{
         uint256 startTime;
         uint256 endTime;
         uint256 totalToken;
+        uint256 votingDuration;
         uint256[] optionCounts; // Stores the number of votes for each option
         mapping(uint256=>address[]) voteForOptions; // Stores addresses of voters for each option
         mapping(address => bool) hasVoted;
     }
-    
+
     uint256 private voteSessionCounter;
-    uint256 private bet = 1 ether;
-    uint256 private votingDuration;
+    uint256 private bet;
 
     mapping(uint256=>VoteSession) private voteSessions;
     mapping(uint256=>uint256) private totalOptions;
 
-    event createVote(uint256 options);
+    event createVote(string topic, uint256 options);
     event endVote(uint256 voteSessionId);
 
-    constructor(uint256 duration){
-        votingDuration = duration;
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
     }
 
     // Function to create a new voting session with the given number of options
-    function createVoteSession(string calldata topic, uint256 options) external onlyOwner{
+    function createVoteSession(string calldata topic, uint256 options, uint256 duration) external onlyOwner{
         require(options > 1, "Invaild number of options");
         voteSessionCounter++;
 
@@ -41,26 +42,27 @@ contract Voting is Ownable{
         v.topic = topic;
         v.isVoting = true;
         v.startTime = block.timestamp;
-        v.endTime = block.timestamp + votingDuration;
+        v.endTime = block.timestamp + duration;
         v.totalToken = 0;
+        v.votingDuration = duration;
         v.optionCounts = new uint256[](options);
         totalOptions[voteSessionCounter] = options;
 
-        emit createVote(options);
+        emit createVote(topic, options);
     }
 
     // Function to vote for a specific option in a voting session
     function vote(uint256 voteSessionId, uint256 option) external payable{
-        require(!voteSessions[voteSessionId].hasVoted[msg.sender], "You have already voted");
+        require(!voteSessions[voteSessionId].hasVoted[_msgSender()], "You have already voted");
         require(voteSessions[voteSessionId].isVoting, "Voting has ended");
         require(voteSessions[voteSessionId].endTime >= block.timestamp, "Voting has ended");
         require(msg.value == bet, "Insufficient tokens to vote");
         require(option < totalOptions[voteSessionId],"Invaild voting option");
 
-        voteSessions[voteSessionId].hasVoted[msg.sender] = true;
+        voteSessions[voteSessionId].hasVoted[_msgSender()] = true;
 
         voteSessions[voteSessionId].optionCounts[option] += 1;
-        voteSessions[voteSessionId].voteForOptions[option].push(msg.sender);
+        voteSessions[voteSessionId].voteForOptions[option].push(_msgSender());
 
         voteSessions[voteSessionId].totalToken += bet;
     }
@@ -105,14 +107,9 @@ contract Voting is Ownable{
 
     }
 
-    // Function to set the voting duration
-    function setVotingDuration(uint256 duration) external onlyOwner{
-        votingDuration = duration;
-    }
-
     // Function to set the betting amount
-    function setBetPrice(uint256 _bet) external onlyOwner {
-        bet = _bet;
+    function setBetPrice(uint256 newBet) external onlyOwner {
+        bet = newBet;
     }
 
     function forceVotingEnd(uint256 voteSessionId) external onlyOwner {
@@ -132,4 +129,15 @@ contract Voting is Ownable{
             session.totalToken
         );
     }
+
+    function initialize() initializer public {
+        __Ownable_init();
+        __UUPSUpgradeable_init();
+    }
+
+    function _authorizeUpgrade(address newImplementation)
+        internal
+        onlyOwner
+        override
+    {}
 }
